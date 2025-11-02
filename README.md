@@ -2,7 +2,7 @@
 
 ## 1) Kur
 ```bash
-cd Turkai_v0_2
+cd turkai
 cp .env.example .env
 docker compose up -d ollama
 docker exec -it turkai-ollama bash -lc "ollama pull mistral:7b-instruct"
