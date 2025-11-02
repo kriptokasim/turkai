@@ -1,0 +1,31 @@
+services:
+  ollama:
+    image: ollama/ollama:latest
+    container_name: turkai-ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-models:/root/.ollama
+    healthcheck:
+      test: ["CMD","ollama","list"]
+      start_period: 20s
+      interval: 5s
+      timeout: 4s
+      retries: 30
+
+  api:
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+    container_name: turkai-api
+    environment:
+      MODEL_NAME: "qwen2.5-coder:1.5b"
+      OLLAMA_URL: "http://ollama:11434"
+    ports:
+      - "8011:8000"
+    depends_on:
+      ollama:
+        condition: service_healthy
+
+volumes:
+  ollama-models: {}

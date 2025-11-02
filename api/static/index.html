@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Turkai UI</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+      :root {
+        color-scheme: light dark;
+        --bg: #0f111a;
+        --panel: #161925;
+        --text: #e7ecff;
+        --accent: #3b82f6;
+        --border: #273043;
+        --user: #20283a;
+        --assistant: #182232;
+      }
+
+      body {
+        margin: 0;
+        font-family: system-ui, "Segoe UI", sans-serif;
+        background: var(--bg);
+        color: var(--text);
+        display: flex;
+        min-height: 100vh;
+        justify-content: center;
+      }
+
+      .app {
+        width: min(960px, 100%);
+        padding: 24px;
+        box-sizing: border-box;
+      }
+
+      header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 16px;
+        gap: 12px;
+        flex-wrap: wrap;
+      }
+
+      header h1 {
+        margin: 0;
+        font-size: 1.5rem;
+      }
+
+      .header-actions {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        flex-wrap: wrap;
+      }
+
+      .conversation {
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        background: var(--panel);
+        padding: 16px;
+        height: 55vh;
+        overflow-y: auto;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        margin-bottom: 16px;
+      }
+
+      .bubble {
+        border-radius: 10px;
+        padding: 12px 14px;
+        white-space: pre-wrap;
+        line-height: 1.45;
+      }
+
+      .bubble.user {
+        background: var(--user);
+        align-self: flex-end;
+      }
+
+      .bubble.assistant {
+        background: var(--assistant);
+        border-left: 3px solid var(--accent);
+      }
+
+      textarea,
+      input {
+        width: 100%;
+        box-sizing: border-box;
+        border-radius: 10px;
+        border: 1px solid var(--border);
+        background: rgb(9 11 18 / 60%);
+        color: var(--text);
+        padding: 12px;
+        font-size: 1rem;
+        font-family: inherit;
+        resize: vertical;
+      }
+
+      textarea:focus,
+      input:focus {
+        outline: 2px solid var(--accent);
+      }
+
+      .controls {
+        display: flex;
+        gap: 12px;
+        margin-top: 12px;
+        align-items: center;
+      }
+
+      button {
+        border: none;
+        border-radius: 8px;
+        padding: 12px 18px;
+        font-size: 1rem;
+        cursor: pointer;
+        background: var(--accent);
+        color: white;
+        transition: transform 0.1s ease, opacity 0.1s ease;
+      }
+
+      button.secondary {
+        background: transparent;
+        border: 1px solid var(--border);
+      }
+
+      button:disabled {
+        opacity: 0.6;
+        cursor: progress;
+      }
+
+      .status {
+        font-size: 0.9rem;
+        color: #9aa6d7;
+        min-height: 1.2em;
+      }
+
+      @media (max-width: 640px) {
+        .conversation {
+          height: 50vh;
+        }
+        .controls {
+          flex-direction: column;
+          align-items: stretch;
+        }
+        button,
+        .controls button {
+          width: 100%;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="app">
+      <header>
+        <h1>Turkai Local Assistant</h1>
+        <div class="header-actions">
+          <span class="status" id="sessionInfo"></span>
+          <button class="secondary" id="resetBtn">New chat</button>
+          <button class="secondary" id="closeBtn">Close</button>
+        </div>
+      </header>
+
+      <label>
+        System prompt (first request only)
+        <textarea id="systemPrompt" rows="2">You are a precise coding assistant.</textarea>
+      </label>
+
+      <div class="conversation" id="conversation"></div>
+
+      <label>
+        Ask Turkai
+        <textarea id="userInput" rows="3" placeholder="Write a Python function that..."></textarea>
+      </label>
+
+      <div class="controls">
+        <button id="sendBtn">Send</button>
+        <span class="status" id="status"></span>
+      </div>
+    </div>
+
+    <script>
+      const apiUrl = "/chat";
+      const conversationEl = document.getElementById("conversation");
+      const userInputEl = document.getElementById("userInput");
+      const systemPromptEl = document.getElementById("systemPrompt");
+      const sendBtn = document.getElementById("sendBtn");
+      const resetBtn = document.getElementById("resetBtn");
+      const closeBtn = document.getElementById("closeBtn");
+      const statusEl = document.getElementById("status");
+      const sessionInfoEl = document.getElementById("sessionInfo");
+
+      let sessionId = null;
+
+      function addBubble(role, text) {
+        const bubble = document.createElement("div");
+        bubble.className = `bubble ${role}`;
+        bubble.textContent = text;
+        conversationEl.appendChild(bubble);
+        conversationEl.scrollTop = conversationEl.scrollHeight;
+      }
+
+      function setLoading(isLoading) {
+        sendBtn.disabled = isLoading;
+        userInputEl.disabled = isLoading;
+        statusEl.textContent = isLoading ? "Thinking..." : "";
+      }
+
+      function updateSessionInfo() {
+        sessionInfoEl.textContent = sessionId ? `Session: ${sessionId}` : "";
+      }
+
+      async function sendMessage() {
+        const userMessage = userInputEl.value.trim();
+        if (!userMessage) {
+          return;
+        }
+
+        const messages = [];
+        if (!sessionId) {
+          const systemMessage = systemPromptEl.value.trim();
+          if (systemMessage) {
+            messages.push({ role: "system", content: systemMessage });
+          }
+        }
+        messages.push({ role: "user", content: userMessage });
+
+        addBubble("user", userMessage);
+        userInputEl.value = "";
+
+        setLoading(true);
+        try {
+          const response = await fetch(apiUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              session_id: sessionId,
+              messages,
+              options: {},
+            }),
+          });
+
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+          }
+
+          const data = await response.json();
+          sessionId = data.session_id || sessionId;
+          updateSessionInfo();
+          addBubble("assistant", data.answer || "[no answer]");
+        } catch (error) {
+          addBubble("assistant", `[error] ${error.message}`);
+        } finally {
+          setLoading(false);
+          userInputEl.focus();
+        }
+      }
+
+      function resetConversation() {
+        sessionId = null;
+        conversationEl.textContent = "";
+        statusEl.textContent = "Session reset.";
+        userInputEl.disabled = false;
+        sendBtn.disabled = false;
+        closeBtn.disabled = false;
+        updateSessionInfo();
+        systemPromptEl.focus();
+      }
+
+      function closeConversation() {
+        if (!sessionId) {
+          sessionInfoEl.textContent = "No active session.";
+          return;
+        }
+        const hint = `Session closed: ${sessionId}\nResume later with:\n  turkai resume ${sessionId}`;
+        addBubble("assistant", hint);
+        statusEl.textContent = "Session closed.";
+        sessionInfoEl.textContent = `Session closed: ${sessionId}`;
+        userInputEl.disabled = true;
+        sendBtn.disabled = true;
+        closeBtn.disabled = true;
+      }
+
+      sendBtn.addEventListener("click", sendMessage);
+      resetBtn.addEventListener("click", resetConversation);
+      closeBtn.addEventListener("click", closeConversation);
+      userInputEl.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" && !event.shiftKey) {
+          event.preventDefault();
+          sendMessage();
+        }
+      });
+      updateSessionInfo();
+    </script>
+  </body>
+</html>

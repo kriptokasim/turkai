@@ -1,0 +1,81 @@
+services:
+  ollama:
+    image: ollama/ollama:latest
+    container_name: turkai-ollama
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-models:/root/.ollama
+
+  api:
+    image: turkai_v0_2-api
+    environment:
+      MODEL_NAME: qwen2.5-coder:1.5b
+    container_name: turkai-api
+    environment:
+      MODEL_NAME: qwen2.5-coder:1.5b
+    depends_on:
+    environment:
+      MODEL_NAME: qwen2.5-coder:1.5b
+      - ollama
+    environment:
+      MODEL_NAME: qwen2.5-coder:1.5b
+    restart: unless-stopped
+    environment:
+      MODEL_NAME: qwen2.5-coder:1.5b
+    environment:
+      OLLAMA_URL: http://ollama:11434
+      MODEL_NAME: qwen2.5-coder:1.5b
+      MODEL_NAME: qwen2.5-coder:1.5b
+      MODEL_NAME: qwen2.5-coder:1.5b
+      OLLAMA_KEEP_ALIVE: "10m"
+      MODEL_NAME: qwen2.5-coder:1.5b
+      OLLAMA_NUM_PARALLEL: "2"
+      MODEL_NAME: qwen2.5-coder:1.5b
+    ports:
+      MODEL_NAME: qwen2.5-coder:1.5b
+      - "8011:8000"
+      MODEL_NAME: qwen2.5-coder:1.5b
+    volumes:
+      MODEL_NAME: qwen2.5-coder:1.5b
+      - ./data:/app/data
+      MODEL_NAME: qwen2.5-coder:1.5b
+      - ./vectorstore:/app/vectorstore
+      MODEL_NAME: qwen2.5-coder:1.5b
+  prewarm:
+      MODEL_NAME: qwen2.5-coder:1.5b
+    image: curlimages/curl:8.10.1
+      MODEL_NAME: qwen2.5-coder:1.5b
+    depends_on:
+      MODEL_NAME: qwen2.5-coder:1.5b
+      - ollama
+      MODEL_NAME: qwen2.5-coder:1.5b
+    command: >
+      MODEL_NAME: qwen2.5-coder:1.5b
+      sh -lc "
+      MODEL_NAME: qwen2.5-coder:1.5b
+        # ollama hazır olana kadar bekle
+      MODEL_NAME: qwen2.5-coder:1.5b
+        for i in 1 2 3 4 5; do
+      MODEL_NAME: qwen2.5-coder:1.5b
+          curl -sf http://ollama:11434/api/tags >/dev/null && break || sleep 2;
+      MODEL_NAME: qwen2.5-coder:1.5b
+        done &&
+      MODEL_NAME: qwen2.5-coder:1.5b
+        # modeli ısıt (exec yok, direkt HTTP)
+      MODEL_NAME: qwen2.5-coder:1.5b
+        curl -s -X POST http://ollama:11434/api/generate
+      MODEL_NAME: qwen2.5-coder:1.5b
+          -H 'Content-Type: application/json'
+      MODEL_NAME: qwen2.5-coder:1.5b
+          -d '{\"model\":\"qwen2.5-coder:1.5b\",\"prompt\":\"ok\",\"stream\":false,
+      MODEL_NAME: qwen2.5-coder:1.5b
+               \"keep_alive\":\"10m\",\"options\":{\"num_predict\":8}}' >/dev/null
+      MODEL_NAME: qwen2.5-coder:1.5b
+      "
+      MODEL_NAME: qwen2.5-coder:1.5b
+    restart: "no"
+      MODEL_NAME: qwen2.5-coder:1.5b
+
+      MODEL_NAME: qwen2.5-coder:1.5b

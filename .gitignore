@@ -1,0 +1,7 @@
+hf_cache/
+__pycache__/
+*.pyc
+*.pyo
+*.log
+*.tmp
+.DS_Store

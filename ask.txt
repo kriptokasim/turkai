@@ -1,0 +1,3 @@
+Sadece kod ver. ```python
+print(1)
+```

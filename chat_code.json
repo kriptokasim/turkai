@@ -1,0 +1,5 @@
+{
+  "messages":[
+    {"role":"user","content":"Sadece kod ver, tek çözüm. 20 satırı geçmesin. ```python``` metni snake_case e çeviren fonksiyon + 2 basit test."}
+  ]
+}

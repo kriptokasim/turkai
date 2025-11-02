@@ -1,0 +1,34 @@
+# docker-compose.override.yml
+# docker-compose.override.yml
+services:
+
+  ollama:
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
+    image: ollama/ollama:latest
+    container_name: turkai-ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-models:/root/.ollama
+    restart: unless-stopped
+
+  api:
+    environment:
+    OLLAMA_URL: http://ollama:11434
+    MODEL_NAME: qwen2.5-coder:1.5b
+    build: ./api
+    container_name: turkai-api
+    env_file: .env
+    volumes:
+      - ./data:/app/data
+      - ./vectorstore:/app/vectorstore
+    depends_on:
+      - ollama
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+
+volumes:
+  ollama-models:

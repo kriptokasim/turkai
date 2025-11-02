@@ -1,0 +1,5 @@
+services:
+  api:
+    environment:
+      MODEL_NAME: "qwen2.5-coder:1.5b"
+      OLLAMA_URL: "http://ollama:11434"

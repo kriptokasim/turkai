@@ -1,0 +1,6 @@
+services:
+  ollama:
+    volumes:
+      - ollama-models:/root/.ollama
+volumes:
+  ollama-models: {}

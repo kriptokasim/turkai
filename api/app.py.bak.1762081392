@@ -1,0 +1,83 @@
+from typing import List, Literal, Optional
+from fastapi import FastAPI, Body
+from pydantic import BaseModel
+import os, requests, json, logging
+
+app = FastAPI()
+log = logging.getLogger("turkai")
+logging.basicConfig(level=logging.INFO)
+
+OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "http://ollama:11434")
+MODEL = os.environ.get("MODEL", "qwen2.5-coder:1.5b")
+
+class Msg(BaseModel):
+    role: Literal["user","assistant","system"]
+    content: str
+
+class ChatIn(BaseModel):
+    messages: List[Msg]
+    options: Optional[dict] = None
+
+def _call_ollama_generate(prompt: str, options: Optional[dict]):
+    return requests.post(
+        f"{OLLAMA_HOST}/api/generate",
+        json={"model": MODEL, "prompt": prompt, "stream": False, "options": options or {}},
+        timeout=60,
+    )
+
+def _call_ollama_chat(prompt: str, options: Optional[dict]):
+    return requests.post(
+        f"{OLLAMA_HOST}/api/chat",
+        json={"model": MODEL, "messages": [{"role": "user", "content": prompt}], "stream": False, "options": options or {}},
+        timeout=60,
+    )
+
+def _extract_answer(j):
+    if isinstance(j, dict) and isinstance(j.get("response"), str):
+        return j["response"]
+    if isinstance(j, dict) and isinstance(j.get("message"), dict):
+        c = j["message"].get("content")
+        if isinstance(c, str): return c
+    msgs = j.get("messages") if isinstance(j, dict) else None
+    if isinstance(msgs, list):
+        parts = [m.get("content","") for m in msgs if isinstance(m, dict) and isinstance(m.get("content"), str)]
+        if parts: return "".join(parts)
+    if isinstance(j, str): return j
+    try:
+        return json.dumps(j)[:1000]
+    except Exception:
+        return ""
+
+@app.get("/healthz")
+def health(): return {"ok": True}
+
+@app.get("/")
+def root():
+    return {"name": "Turkai API", "model": MODEL, "tools_enabled": False, "tools": []}
+
+@app.post("/chat")
+def chat(payload: ChatIn = Body(...)):
+    # Her durumda 200 + {"answer": "..."} döndür ki CLI tarafı hep stabil olsun
+    try:
+        user_contents = [m.content for m in payload.messages if m.role == "user"]
+        prompt = user_contents[-1] if user_contents else ""
+        options = payload.options or {}
+        r = _call_ollama_generate(prompt, options)
+        if r.status_code == 404:
+            r = _call_ollama_chat(prompt, options)
+        if not r.ok:
+            try: body = json.dumps(r.json())[:1000]
+            except Exception: body = (r.text or "")[:1000]
+            log.error("Ollama error %s: %s", r.status_code, body)
+            return {"answer": f"[upstream {r.status_code}] {body}"}
+        try: j = r.json()
+        except Exception: return {"answer": (r.text or "[upstream returned non-JSON]")[:1000]}
+        ans = (_extract_answer(j) or "").strip()
+        return {"answer": ans or "[empty answer]"}
+    except requests.Timeout:
+        return {"answer": "[timeout] Ollama 60s içinde yanıt vermedi."}
+    except requests.RequestException as e:
+        return {"answer": f"[request error] {e}"}
+    except Exception as e:
+        log.exception("Unhandled server error")
+        return {"answer": f"[server error] {e}"}
