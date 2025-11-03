@@ -21,8 +21,13 @@ services:
     environment:
       MODEL_NAME: "qwen2.5-coder:1.5b"
       OLLAMA_URL: "http://ollama:11434"
+      REPO_ROOT: "/workspace/repo"
+      SAFE_ROOT: "/workspace/repo"
     ports:
       - "8011:8000"
+    volumes:
+      - ${HOST_REPO_PATH:-..}:/workspace/repo
+      - ./data/sessions:/app/data/sessions
     depends_on:
       ollama:
         condition: service_healthy
