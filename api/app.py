@@ -921,3 +921,48 @@ def agent_step(payload: AgentIn = Body(...), _: bool = Depends(require_api_key))
         return {"ok": True, "observation": res}
 
     return {"ok": False, "error": f"unknown action: {action}", "cmd": cmd}
+
+# ==== Mini tool-calling: /agent/step ==========================================
+from typing import Literal
+
+class AgentStepIn(BaseModel):
+    session_id: Optional[str] = None
+    action: Literal["fs.read", "fs.write", "exec.run"]
+    args: Dict[str, Any] = {}
+
+@app.post("/agent/step")
+def agent_step(body: AgentStepIn):
+    """
+    Basit tek-adım tool-calling:
+      {"action":"fs.read","args":{"path":"api/app.py"}}
+      {"action":"fs.write","args":{"path":"demo/a.py","content":"print(1)"}}
+      {"action":"exec.run","args":{"cmd":"pytest -q","cwd":"."}}
+    """
+    try:
+        if body.action == "fs.read":
+            path = body.args.get("path")
+            if not isinstance(path, str):
+                raise HTTPException(status_code=400, detail="path required")
+            return fs_read(path=path)
+
+        elif body.action == "fs.write":
+            path = body.args.get("path")
+            content = body.args.get("content", "")
+            if not isinstance(path, str) or not isinstance(content, str):
+                raise HTTPException(status_code=400, detail="path/content required")
+            return fs_write(FSWriteIn(path=path, content=content))
+
+        elif body.action == "exec.run":
+            cmd = body.args.get("cmd")
+            if not isinstance(cmd, str):
+                raise HTTPException(status_code=400, detail="cmd required")
+            return exec_run(ExecIn(cmd=cmd, cwd=body.args.get("cwd"), timeout=body.args.get("timeout")))
+
+        else:
+            raise HTTPException(status_code=400, detail=f"unknown action: {body.action}")
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        log.exception("agent step failed")
+        raise HTTPException(status_code=500, detail=f"agent step error: {e}")
