@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="tr">
+<html lang="en">
   <head>
     <meta charset="utf-8" />
     <title>Turkai UI</title>
@@ -33,26 +33,29 @@
       .header-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
       .conversation {
         border: 1px solid var(--border); border-radius: 12px; background: var(--panel);
-        padding: 16px; height: 55vh; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; margin-bottom: 16px;
+        padding: 16px; height: 55vh; overflow-y: auto; display: flex; flex-direction: column;
+        gap: 12px; margin-bottom: 16px;
       }
       .bubble { border-radius: 10px; padding: 12px 14px; white-space: pre-wrap; line-height: 1.45; }
       .bubble.user { background: var(--user); align-self: flex-end; }
       .bubble.assistant { background: var(--assistant); border-left: 3px solid var(--accent); }
       textarea, input {
-        width: 100%; box-sizing: border-box; border-radius: 10px;
-        border: 1px solid var(--border); background: rgb(9 11 18 / 60%);
-        color: var(--text); padding: 12px; font-size: 1rem; font-family: inherit; resize: vertical;
+        width: 100%; box-sizing: border-box; border-radius: 10px; border: 1px solid var(--border);
+        background: rgb(9 11 18 / 60%); color: var(--text); padding: 12px; font-size: 1rem;
+        font-family: inherit; resize: vertical;
       }
       textarea:focus, input:focus { outline: 2px solid var(--accent); }
       .controls { display: flex; gap: 12px; margin-top: 12px; align-items: center; flex-wrap: wrap; }
       button {
-        border: none; border-radius: 8px; padding: 10px 14px; font-size: .95rem; cursor: pointer;
-        background: var(--accent); color: white; transition: transform .1s ease, opacity .1s ease;
+        border: none; border-radius: 8px; padding: 12px 18px; font-size: 1rem; cursor: pointer;
+        background: var(--accent); color: white; transition: transform 0.1s ease, opacity 0.1s ease;
       }
       button.secondary { background: transparent; border: 1px solid var(--border); color: var(--text); }
       button:disabled { opacity: 0.6; cursor: progress; }
       .status { font-size: 0.9rem; color: #9aa6d7; min-height: 1.2em; }
-      .shortcut-bar { display:flex; gap:8px; flex-wrap:wrap; margin:8px 0 16px; }
+      .kv { display: grid; grid-template-columns: 130px 1fr; gap: 8px 12px; align-items: center; }
+      .row { display: contents; }
+      .pill { padding: 6px 10px; border: 1px solid var(--border); border-radius: 999px; }
       @media (max-width: 640px) {
         .conversation { height: 50vh; }
         .controls { flex-direction: column; align-items: stretch; }
@@ -66,47 +69,59 @@
         <h1>Turkai Local Assistant</h1>
         <div class="header-actions">
           <span class="status" id="sessionInfo"></span>
-          <button class="secondary" id="resetBtn">Yeni sohbet</button>
-          <button class="secondary" id="closeBtn">Kapat</button>
+          <button class="secondary" id="resetBtn">New chat</button>
+          <button class="secondary" id="closeBtn">Close</button>
         </div>
       </header>
 
-      <label>
-        System prompt (ilk istek için)
-        <textarea id="systemPrompt" rows="2">You are Turkai, a local coding assistant with direct access to the project repository. Use the context/snippet/search/diff helpers and request agent actions when edits or tests are required. Think step by step and describe intended changes before executing them.</textarea>
-      </label>
+      <section class="kv" style="margin-bottom:12px;">
+        <div class="row">
+          <label for="apiKey">X-API-Key</label>
+          <input id="apiKey" placeholder="(optional)" />
+        </div>
+        <div class="row">
+          <span></span>
+          <button class="secondary" id="saveKeyBtn">Save key</button>
+        </div>
+      </section>
 
-      <div class="shortcut-bar">
-        <button class="secondary" id="btnWS">WS ile gönder</button>
-        <button class="secondary" id="btnReadme">README özetle (agent)</button>
-        <button class="secondary" id="btnFormat">Format (black)</button>
-        <button class="secondary" id="btnPytest">Run tests</button>
-        <button class="secondary" id="btnTree">Tree</button>
-        <button class="secondary" id="btnSnippet">Snippet</button>
-        <button class="secondary" id="btnSearch">Search</button>
-        <button class="secondary" id="btnDiff">Diff</button>
-      </div>
+      <label>
+        System prompt (first request only)
+        <textarea id="systemPrompt" rows="2">You are a precise coding assistant.</textarea>
+      </label>
 
       <div class="conversation" id="conversation"></div>
 
+      <!-- Agent Loop panel -->
+      <section style="border:1px solid var(--border);border-radius:12px;background:var(--panel);padding:12px;margin:16px 0;">
+        <label>
+          Agent goal
+          <textarea id="agentGoal" rows="3"
+            placeholder='Read demo/hello.py, run it with python3, write stdout to demo/output.txt, then finish.'></textarea>
+        </label>
+        <div class="controls">
+          <button class="secondary" id="agentRunBtn">Run Agent</button>
+          <span class="status" id="agentStatus"></span>
+        </div>
+      </section>
+
       <label>
-        Mesajın
+        Ask Turkai
         <textarea id="userInput" rows="3" placeholder="Write a Python function that..."></textarea>
       </label>
 
       <div class="controls">
-        <button id="sendBtn">Gönder /chat</button>
+        <button id="sendBtn">Send</button>
+        <button class="secondary" id="pytestBtn" title="pytest -q">Run tests</button>
         <span class="status" id="status"></span>
       </div>
     </div>
 
     <script>
-      const api = {
-        chat: "/chat",
-        stream: "/chat/stream",
-        ws: (host) => `ws://${host}/ws/chat`,
-        agent: "/agent/step",
-      };
+      const apiUrl = "/chat";
+      const execPytestUrl = "/exec/pytest";
+      const agentLoopUrl = "/agent/loop";
+
       const conversationEl = document.getElementById("conversation");
       const userInputEl = document.getElementById("userInput");
       const systemPromptEl = document.getElementById("systemPrompt");
@@ -115,20 +130,18 @@
       const closeBtn = document.getElementById("closeBtn");
       const statusEl = document.getElementById("status");
       const sessionInfoEl = document.getElementById("sessionInfo");
+      const pytestBtn = document.getElementById("pytestBtn");
 
-      const btnWS = document.getElementById("btnWS");
-      const btnReadme = document.getElementById("btnReadme");
-      const btnFormat = document.getElementById("btnFormat");
-      const btnPytest = document.getElementById("btnPytest");
-      const btnTree = document.getElementById("btnTree");
-      const btnSnippet = document.getElementById("btnSnippet");
-      const btnSearch = document.getElementById("btnSearch");
-      const btnDiff = document.getElementById("btnDiff");
+      const agentRunBtn = document.getElementById("agentRunBtn");
+      const agentGoalEl = document.getElementById("agentGoal");
+      const agentStatusEl = document.getElementById("agentStatus");
+
+      const apiKeyInput = document.getElementById("apiKey");
+      const saveKeyBtn = document.getElementById("saveKeyBtn");
 
       let sessionId = null;
-      const params = new URLSearchParams(window.location.search);
-      const initialSession = params.get("session_id") || params.get("session");
-      const API_KEY = ""; // eğer app için API_KEY ayarladıysan, fetch header'ına ekle
+      let API_KEY = localStorage.getItem("turkai_api_key") || "";
+      apiKeyInput.value = API_KEY;
 
       function addBubble(role, text) {
         const bubble = document.createElement("div");
@@ -144,24 +157,21 @@
         statusEl.textContent = isLoading ? "Thinking..." : "";
       }
 
+      function setAgentLoading(isLoading) {
+        agentRunBtn.disabled = isLoading;
+        agentGoalEl.disabled = isLoading;
+        agentStatusEl.textContent = isLoading ? "Running agent..." : "";
+      }
+
       function updateSessionInfo() {
         sessionInfoEl.textContent = sessionId ? `Session: ${sessionId}` : "";
       }
 
-      async function loadSessionHistory(seedId) {
-        try {
-          const res = await fetch(`/resume?session_id=${encodeURIComponent(seedId)}`);
-          if (!res.ok) return;
-          const data = await res.json();
-          const msgs = (data.messages || []).filter((m) => m.role && m.content);
-          conversationEl.textContent = "";
-          msgs.forEach((m) => addBubble(m.role, m.content));
-          sessionId = seedId;
-          updateSessionInfo();
-        } catch (error) {
-          console.error("loadSessionHistory", error);
-        }
-      }
+      saveKeyBtn.addEventListener("click", () => {
+        API_KEY = apiKeyInput.value.trim();
+        localStorage.setItem("turkai_api_key", API_KEY);
+        addBubble("assistant", API_KEY ? "API key saved." : "API key cleared.");
+      });
 
       async function sendMessage() {
         const userMessage = userInputEl.value.trim();
@@ -179,18 +189,20 @@
 
         setLoading(true);
         try {
-          const response = await fetch(api.chat, {
+          const headers = { "Content-Type": "application/json" };
+          // /chat şu an authsuz; gerekirse buraya ekleyebilirsin:
+          // if (API_KEY) headers["X-API-Key"] = API_KEY;
+
+          const response = await fetch(apiUrl, {
             method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              ...(API_KEY ? { "X-API-Key": API_KEY } : {}),
-            },
+            headers,
             body: JSON.stringify({
               session_id: sessionId,
               messages,
               options: {},
             }),
           });
+
           if (!response.ok) throw new Error(`HTTP ${response.status}`);
           const data = await response.json();
           sessionId = data.session_id || sessionId;
@@ -204,157 +216,76 @@
         }
       }
 
-      // WebSocket kısa yol
-      btnWS.addEventListener("click", () => {
-        const ws = new WebSocket(api.ws(location.host));
-        ws.onopen = () => {
-          const msgs = [{ role: "user", content: userInputEl.value || "Hello via WS" }];
-          ws.send(JSON.stringify({ messages: msgs }));
-        };
-        ws.onmessage = (ev) => addBubble("assistant", ev.data);
-        ws.onerror = () => addBubble("assistant", "WS error");
-      });
-
-      // /agent/step kısa yol
-      async function agentStep(msgs, allow, cwd=".") {
-        const r = await fetch(api.agent, {
-          method: "POST",
-          headers: {
+      async function runPytests() {
+        setLoading(true);
+        try {
+          const headers = {
             "Content-Type": "application/json",
-            ...(API_KEY ? { "X-API-Key": API_KEY } : {}),
-          },
-          body: JSON.stringify({ messages: msgs, allow, cwd }),
-        });
-        return r.json();
+          };
+          if (API_KEY) headers["X-API-Key"] = API_KEY;
+
+          const response = await fetch(execPytestUrl, {
+            method: "POST",
+            headers,
+            body: JSON.stringify({ extra: "-q", cwd: "." }),
+          });
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          const data = await response.json();
+          const out =
+            `pytest exit=${data.exit_code}\n` +
+            (data.stdout || "") +
+            (data.stderr ? `\n[stderr]\n${data.stderr}` : "");
+          addBubble("assistant", out.trim() || "[no output]");
+        } catch (e) {
+          addBubble("assistant", `[exec error] ${e.message}`);
+        } finally {
+          setLoading(false);
+        }
       }
 
-      btnReadme.addEventListener("click", async () => {
-        const msgs = [
-          { role: "system", content: "Return JSON only." },
-          { role: "user", content: "Read README.md then FINAL a one sentence summary." }
-        ];
-        const res = await agentStep(msgs, ["fs.read"]);
-        addBubble("assistant", JSON.stringify(res, null, 2));
-      });
-
-      btnFormat.addEventListener("click", async () => {
-        const msgs = [
-          { role: "user", content: "Run black on api/app.py; if black not found, FINAL with an instruction." }
-        ];
-        const res = await agentStep(msgs, ["exec.run"]);
-        addBubble("assistant", JSON.stringify(res, null, 2));
-      });
-
-      btnPytest.addEventListener("click", async () => {
-        const msgs = [{ role: "user", content: "Execute: pytest -q. Return stdout." }];
-        const res = await agentStep(msgs, ["exec.run"]);
-        addBubble("assistant", JSON.stringify(res, null, 2));
-      });
-
-      btnTree.addEventListener("click", async () => {
-        const base = prompt("Tree root (relative to repo)", ".") ?? ".";
-        const depth = parseInt(prompt("Max depth", "2") ?? "2", 10);
-        const maxEntries = parseInt(prompt("Max entries", "200") ?? "200", 10);
-        try {
-          const res = await fetch("/context/tree", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              ...(API_KEY ? { "X-API-Key": API_KEY } : {}),
-            },
-            body: JSON.stringify({ path: base, max_depth: depth, max_entries: maxEntries }),
-          });
-          const data = await res.json();
-          addBubble("assistant", JSON.stringify(data, null, 2));
-        } catch (error) {
-          addBubble("assistant", `[tree error] ${error.message}`);
+      async function runAgent() {
+        const goal = agentGoalEl.value.trim();
+        if (!goal) {
+          addBubble("assistant", "[agent] Please enter a goal first.");
+          return;
         }
-      });
-
-      btnSnippet.addEventListener("click", async () => {
-        const path = prompt("File path", "api/app.py");
-        if (!path) return;
-        const line = parseInt(prompt("Line", "1") ?? "1", 10);
-        const context = parseInt(prompt("Context lines", "8") ?? "8", 10);
+        setAgentLoading(true);
         try {
-          const res = await fetch("/context/snippet", {
+          const headers = { "Content-Type": "application/json" };
+          if (API_KEY) headers["X-API-Key"] = API_KEY;
+
+          const resp = await fetch(agentLoopUrl, {
             method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              ...(API_KEY ? { "X-API-Key": API_KEY } : {}),
-            },
-            body: JSON.stringify({ path, line, context }),
+            headers,
+            body: JSON.stringify({ goal, max_steps: 5 })
           });
-          const data = await res.json();
-          if (data.snippet) {
-            addBubble(
-              "assistant",
-              `${data.path}:${data.start_line}-${data.end_line}\n${data.snippet}`
-            );
-          } else {
-            addBubble("assistant", JSON.stringify(data, null, 2));
+          if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+          const data = await resp.json();
+          const lines = [];
+          lines.push(`Agent session: ${data.session_id || "-"}`);
+          (data.steps || []).forEach(s => {
+            lines.push(`\n# Step ${s.step} — ${s.action}`);
+            if (s.args) lines.push(`args: ${JSON.stringify(s.args)}`);
+            if (s.error) {
+              lines.push(`error: ${s.error}`);
+            } else if (s.observation != null) {
+              const obs = typeof s.observation === 'string'
+                ? s.observation
+                : JSON.stringify(s.observation, null, 2);
+              lines.push(`observation:\n${obs}`);
+            }
+          });
+          if (data.done) {
+            const res = (typeof data.result === 'string' ? data.result : JSON.stringify(data.result));
+            lines.push(`\n[done] result: ${res}`);
           }
-        } catch (error) {
-          addBubble("assistant", `[snippet error] ${error.message}`);
+          addBubble("assistant", lines.join("\n"));
+        } catch (e) {
+          addBubble("assistant", `[agent error] ${e.message}`);
+        } finally {
+          setAgentLoading(false);
         }
-      });
-
-      btnSearch.addEventListener("click", async () => {
-        const pattern = prompt("Regex pattern", "class ");
-        if (!pattern) return;
-        const base = prompt("Search root", ".") ?? ".";
-        const caseSensitive = confirm("Case sensitive search?");
-        try {
-          const res = await fetch("/fs/search", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              ...(API_KEY ? { "X-API-Key": API_KEY } : {}),
-            },
-            body: JSON.stringify({
-              pattern,
-              path: base,
-              case_sensitive: caseSensitive,
-            }),
-          });
-          const data = await res.json();
-          if (!data.matches.length) {
-            addBubble("assistant", "[search] no matches");
-            return;
-          }
-          const out = data.matches
-            .map((m) => `${m.path}:${m.line} ${m.preview}`)
-            .join("\n");
-          addBubble("assistant", out);
-        } catch (error) {
-          addBubble("assistant", `[search error] ${error.message}`);
-        }
-      });
-
-      btnDiff.addEventListener("click", async () => {
-        const rawPaths = prompt("Diff paths (space separated)", "") || "";
-        const staged = confirm("Include staged changes?");
-        const unified = parseInt(prompt("Unified context", "3") ?? "3", 10);
-        const paths = rawPaths.trim() ? rawPaths.trim().split(/\s+/) : [];
-        try {
-          const res = await fetch("/context/diff", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              ...(API_KEY ? { "X-API-Key": API_KEY } : {}),
-            },
-            body: JSON.stringify({ paths, staged, unified }),
-          });
-          if (!res.ok) {
-            addBubble("assistant", `[diff error] ${res.status}`);
-            return;
-          }
-          const data = await res.json();
-          addBubble("assistant", data.diff || "[no diff]");
-        } catch (error) {
-          addBubble("assistant", `[diff error] ${error.message}`);
-        }
-      });
+      }
 
       function resetConversation() {
         sessionId = null;
@@ -382,6 +313,8 @@
       }
 
       sendBtn.addEventListener("click", sendMessage);
+      pytestBtn.addEventListener("click", runPytests);
+      agentRunBtn.addEventListener("click", runAgent);
       resetBtn.addEventListener("click", resetConversation);
       closeBtn.addEventListener("click", closeConversation);
       userInputEl.addEventListener("keydown", (event) => {
@@ -391,9 +324,6 @@
         }
       });
       updateSessionInfo();
-      if (initialSession) {
-        loadSessionHistory(initialSession);
-      }
     </script>
   </body>
 </html>
